@@ -57,13 +57,34 @@ data_plot
 
 ```
 
+# Linear Regression
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r cal_b0_b1}
+b1 <- sum((braking_data_train$speed_kmh - mean(braking_data_train$speed_kmh)) * (braking_data_train$dist_m - mean(braking_data_train$dist_m))) /
+  sum((braking_data_train$speed_kmh - mean(braking_data_train$speed_kmh))^2)
+b0 <- mean(braking_data_train$dist_m) - b1 * mean(braking_data_train$speed_kmh)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r verify_pedastrain}
+model <- lm(braking_data_train$dist_m ~ braking_data_train$speed_kmh)
+coefficients <- coef(model)
+b0_lm <- coefficients[1]
+b1_lm <- coefficients[2]
+r_2_lm <- summary(model)$r.squared
+```
+
+```{r cal_R^2}
+predict_dist_m = b0 + b1 * braking_data_train$speed_kmh
+ESS <- sum((predict_dist_m - mean(braking_data_train$dist_m))^2)
+TSS <- sum((mean(braking_data_train$dist_m) - braking_data_train$dist_m)^2)
+r_2 <- ESS / TSS
+```
+
+
+```{r show_lr_result}
+data_plot +
+  geom_abline(aes(slope = b1, intercept = b0, col = "SLR" ), show.legend = FALSE) +
+  scale_colour_manual(name = "Model fit", values = c("red", "blue"))
+
+```
+
