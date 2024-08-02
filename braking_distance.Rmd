@@ -1,0 +1,69 @@
+---
+title: "BrakingDistance"
+author: "Yuzheng_Wang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library}
+# install library
+# install.packages("dplyr")
+# install.packages("tidyverse")
+
+# import library
+library(dplyr)
+library(tidyverse)
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r read_data}
+file_path <- './Dataset/braking.csv'
+braking_data <- read.csv(file_path)
+str(braking_data)
+```
+
+```{r mutate_unit}
+braking_data <- braking_data %>%
+  mutate(speed_kmh = speed * 1.60934) %>%
+  mutate(dist_m = dist * 0.3048)
+
+head(braking_data)
+
+```
+```{r separate_data}
+set.seed(1)
+train_ind <- sample(1:50, size = 50 * 0.8)
+
+braking_data_train <- braking_data[train_ind,]
+braking_data_test <- braking_data[-train_ind,]
+```
+
+
+```{r plot_data_point}
+data_plot <- ggplot(data = braking_data_train, aes(x=speed_kmh, y=dist_m)) +
+  geom_point(color = "black", alpha = 0.3)
+
+data_plot
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
