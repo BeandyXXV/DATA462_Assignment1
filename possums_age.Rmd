@@ -1,0 +1,44 @@
+---
+title: "possum_age"
+author: "Yuzheng Wang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_library, echo=FALSE}
+#install.packages("tidyverse")
+# import library
+library(dplyr)
+library(tidyverse)
+```
+
+
+```{r load_possums_data, echo=FALSE}
+data_path <- "Dataset/possums.csv"
+origin_possums_data <- read.csv(data_path)
+```
+
+```{r init_plot, echo=FALSE}
+data_plot <- ggplot(origin_possums_data, aes(x = totlngth, y = age)) +
+  geom_point() +
+  labs(title = "年龄 vs 总长度（负鼠）",
+       x = "总长度",
+       y = "年龄") +
+  theme_minimal()
+data_plot
+```
+
+
+```{r process_possums_data, echo=FALSE}
+# remove col
+possums_data <- origin_possums_data %>% select(-c(case, Pop))
+
+# encode site to one-hot
+possums_data <- dummy_cols(possums_data, select_columns = "site", remove_first_dummy = TRUE)
+```
+
+
