@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r load_library, echo=FALSE}
-#install.packages("tidyverse")
+# install.packages("tidyverse")
 # import library
 library(dplyr)
 library(tidyverse)
@@ -32,13 +32,46 @@ data_plot <- ggplot(origin_possums_data, aes(x = totlngth, y = age)) +
 data_plot
 ```
 
+There is 7 sites in the dataset, after one-hot encoding, if site1 to site6 are all zero, that means the possum is come from site7.
 
 ```{r process_possums_data, echo=FALSE}
 # remove col
 possums_data <- origin_possums_data %>% select(-c(case, Pop))
 
-# encode site to one-hot
-possums_data <- dummy_cols(possums_data, select_columns = "site", remove_first_dummy = TRUE)
+# One-hot encode the 'site' variable and remove the original 'site' variable
+possums_data <- possums_data %>%
+  mutate(
+    site1 = ifelse(site == '1', 1, 0),
+    site2 = ifelse(site == '2', 1, 0),
+    site3 = ifelse(site == '3', 1, 0),
+    site4 = ifelse(site == '4', 1, 0),
+    site5 = ifelse(site == '5', 1, 0),
+    site6 = ifelse(site == '6', 1, 0)
+  ) %>%
+  select(-site)
+
+# set sex to female and make the data 0 ~ 1
+possums_data <- possums_data %>%
+  mutate(
+    female = ifelse(sex == 'f', 1, 0)
+  ) %>%
+  select(-sex)
+
+# separate data to train-test-val 80%-10%-10%
+set.seed(1)
+data_count <- nrow(possums_data)
+train_ind <- sample(1:data_count, size = data_count * 0.8)
+
+# Subset the training set
+possums_data_train <- possums_data[train_ind, ]
+
+# Create a temporary dataset for the remaining data
+remaining_data <- possums_data[-train_ind, ]
+# Split the remaining data into test (10%) and validation (10%) sets
+test_ind <- sample(1:nrow(remaining_data), size = nrow(remaining_data) * 0.5)
+
+possums_data_test <- remaining_data[test_ind, ]
+possums_data_val <- remaining_data[-test_ind, ]
 ```
 
 
