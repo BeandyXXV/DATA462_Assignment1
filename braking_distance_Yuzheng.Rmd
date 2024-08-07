@@ -1,0 +1,279 @@
+---
+title: "Braking Distance Analysis"
+author: "Yuzheng_Wang, "
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, echo=FALSE, include=FALSE}
+# install library
+# install.packages("dplyr")
+# install.packages("tidyverse")
+
+# import library
+library(dplyr)
+library(tidyverse)
+```
+
+# Introduction
+
+Understanding the relationship between a vehicle’s speed and its braking distance is crucial for automotive safety. Braking distance refers to the distance a vehicle travels from the point when the brakes are applied until it comes to a complete stop. This distance can be significantly influenced by the vehicle’s speed, among other factors such as road conditions, vehicle weight, and braking system efficiency. In this analysis, we aim to understand the relationship between the speed of a vehicle and its braking distance.
+
+# Data Processing
+
+The dataset used in this analysis contains historical data from 1930, recording the speed of vehicles in miles per hour (mph) and the corresponding braking distance in feet. To make the data more comprehensible and relevant for a modern audience, we convert the speed to kilometers per hour (km/h) and the braking distance to meters (m). For the dataset separation, we split 80% of data as Train dataset, to make the simple linear model and knn model, and the rest of 20% data will be set to test data, which used to compare the performance of the two model.
+
+```{r read_data, echo=FALSE, include=FALSE}
+# Load the braking data.
+file_path <- './Dataset/braking.csv'
+origin_braking_data <- read.csv(file_path)
+```
+
+```{r mutate_unit, echo=FALSE, include=FALSE}
+# transfer the unit from historical unit to modern unit.
+# 1 km/h approximatly equal to 1.60934 mph.
+# 1 m approximatly equal to 0.3048 feet.
+braking_data <- origin_braking_data %>%
+  mutate(speed = speed * 1.60934) %>%
+  mutate(dist = dist * 0.3048)
+head(braking_data)
+```
+
+```{r separate_data, echo=FALSE}
+# separate the data for training and testing.
+# set the random seed to ensure that the results of your data processing steps are consistent each time.
+set.seed(1)
+train_ind <- sample(1:50, size = 50 * 0.8)
+
+braking_data_train <- braking_data[train_ind,]
+braking_data_test <- braking_data[-train_ind,]
+```
+
+```{r variant_define, echo=FALSE}
+# setting the basic variant, which will not be changed in the future step
+x_test = braking_data_test$speed
+y_test = braking_data_test$dist
+mean_x_test = mean(x_test)
+mean_y_test = mean(y_test)
+
+x_train = braking_data_train$speed
+y_train = braking_data_train$dist
+mean_x_train = mean(x_train)
+mean_y_train = mean(y_train)
+
+n_train = length(x_train)
+n_test = length(x_test)
+```
+
+```{r plot_data_point, echo=FALSE, fig.cap="Scatter Plot of Vehicle Speed and Braking Distance in training data"}
+data_plot <- ggplot(data = braking_data_train, aes(x = x_train, y = y_train)) +
+  geom_point(color = "black", alpha = 0.3) +
+  labs(x = "Speed (km/h)", y = "Braking Distance (m)") +
+  theme_minimal()
+data_plot
+
+```
+
+# Linear Regression
+
+Linear regression is chosen as the first part of this analysis due to its simplicity and effectiveness in modeling the relationship between two continuous variables. In this case, we aim to understand how vehicle speed influences braking distance. Linear regression provides a straightforward approach to quantify this relationship by fitting a linear equation to the observed data.
+
+## Pedestrian Way
+
+If we know the $\hat b_0$ (Intercept) and the $\hat b_1$ (Slope), when give the $x^\star$, the feature of a new data point, then it's response can be estimated as: $\hat{y}^* = \hat{b_0} + \hat{b_1} \cdot x^*$. While in the pedestrian way, $\hat{b_1}$ and $\hat{b_0}$ can be calculated as: $$\hat b_1 = \frac{Cov(x,y)}{Var(x)} = \frac{\Sigma_{i=1}^{n}(x_i-\bar{x})(y_i-\bar{y})}{\Sigma_{i=1}^{n}(x_i-\bar{x})^2}$$ $$\hat b_0 = \bar{y} - \hat b_1 \cdot \bar{x}$$
+
+```{r cal_b0_b1, echo=FALSE}
+b1 <- sum((x_train - mean_x_train) * (y_train - mean_y_train)) / sum((x_train - mean_x_train)^2)
+b0 <- mean_y_train - b1 * mean_x_train
+
+# print slope and intercept
+cat(paste("Intercept (b0):", b0, ", Slope (b1):", b1, "\n"))
+```
+
+```{r show_lr_result}
+data_plot +
+  geom_abline(slope = b1, intercept = b0, color = "blue", show.legend = FALSE)
+```
+
+```{r speed_increase_effect, echo=FALSE}
+speed_increase <- 5
+distance_increase <- b1 * speed_increase
+cat("Distance increase for a 5 km/h speed increase:", distance_increase, "meters\n")
+```
+
+## Goodness-of-fit
+
+In linear regression, R-squared is a goodness-of-fit measure for linear regression models. This statistic indicates the percentage of the variance in the dependent variable that the independent variables explain collectively. R-squared measures the strength of the relationship between your model and the dependent variable on a convenient 0 – 1 scale. If it close to 1, we consider it's a good model. The formula of R-squire is: $$R^2 = \frac{ESS}{TSS} = \frac{\Sigma^n_{i=1}{(\hat{y}_i - \bar{y})^2}}{\Sigma^n_{i=1}{(y_i - \bar{y})^2}}$$
+
+```{r cal_R^2, echo=FALSE}
+predicted_dist = b0 + b1 * x_train
+ESS <- sum((predicted_dist - mean_y_train)^2)
+TSS <- sum((mean_y_train - y_train)^2)
+r_2 <- ESS / TSS
+cat("Goodness-of-fit(R_square):", r_2)
+```
+
+In our analysis, we found that vehicle speed explains 60% of the variability in braking distance. This means that our linear regression model accounts for 60% of the variation in braking distance. While speed is an important factor, there are other factors (such as road conditions, vehicle weight, and brake system condition) that also significantly affect braking distance and are not accounted for in the current model. Therefore, our model has some predictive capability, but it could be improved by including more variables.
+
+## Is speed a significant predictor for distance at the 95% confidence level?
+
+If the 95% confidence interval for the speed slope ($\beta_1$) does not include zero, we can consider speed as a significant predictor for braking distance. This means we have sufficient evidence to reject the null hypothesis that speed has no effect on braking distance. The confidence interval for the speed slope ($\beta_1$) can be calculated as: $$b_1 \in \left[ \hat{b}_1 - t_{1-\frac{\alpha}{2}}(n - 2) \cdot SE(\hat{b}_1), \hat{b}_1 + t_{1-\frac{\alpha}{2}}(n - 2) \cdot SE(\hat{b}_1) \right]$$
+
+### Calculate the standard error of slope
+
+The Standard Error (SE) can be calculated as $$SE(\hat{\beta}_1) = \sqrt{\frac{\sum (y_i - \hat{y}_i)^2}{n - 2}} / \sqrt{\sum (x_i - \bar{x})^2}$$ 
+
+```{r se_slope, echo=FALSE}
+se_b1 <- sqrt(1/(n_train - 2) * sum((y_train - predicted_dist)^2) / sum((x_train - mean_x_train)^2))
+cat("Standard Error of Slope:", se_b1)
+```
+
+### calculate the confidance interval of b1 at alpha = 0.05
+```{r ci_slope, echo=FALSE}
+alpha_95 <- 0.05
+t <- qt(1-alpha_95/2, n_train - 2)
+b1_lower <- b1 - t * se_b1
+b1_upper <- b1 + t * se_b1
+cat("Confidance Interval of B1 is from :", b1_lower, " to ", b1_upper)
+```
+
+After calculation, the 95% confidance interval of slope b1 is from 0.5590189  to  0.9696595, which means that 0 is not contained in the 95% confidence interval, then we say $b_1$ is significant at $\alpha = 0.05$ in this case. which in turn means that speed is a significant predictor for braking distance.
+
+## predict the braking distance for a car going at 30 km/h, and include an 80% prediction interval.
+
+```{r}
+predict_dist = b0 + b1 * 30
+alpha_80 <- 0.2
+t_80 <- qt(1 - alpha_80 / 2, n_train - 2)
+tau <- t_80 * sqrt((TSS - ESS) / (n_train - 2)) * sqrt(1 + 1 / n_train + (30 - mean_x_train)^2 / sum((x_train - mean_x_train)^2))
+predict_dist_lower <- predict_dist - tau
+predict_dist_upper <- predict_dist + tau
+cat("base on the slr model, the braking distance for a car going at 30 km/h is ", predict_dist, "m. With the 80% prediction interval (", predict_dist_lower, "m, ", predict_dist_upper, "m)")
+
+```
+
+## K-Nearest-Neighbors
+
+```{r knn_function, echo=FALSE}
+kNN <- function(x, k, train_data) {
+  neighborhood_vals <- train_data %>% 
+    # Generate distance between new x and each existing x
+    mutate(eu_distance = abs(speed - x)) %>% 
+    # Sort by distance
+    arrange(eu_distance) %>% 
+    # Add row numbers
+    mutate(row_num = row_number()) %>%
+    # Select rows where distance is less than or equal to the kth smallest distance
+    filter(eu_distance <= nth(eu_distance, k)) %>%
+    # Select the target response
+    select(dist, row_num)
+  
+  # If we have more than k neighbors due to ties, randomly select k
+  if(nrow(neighborhood_vals) > k) {
+    set.seed(123)  # for reproducibility
+    neighborhood_vals <- neighborhood_vals %>%
+      sample_n(k)
+  }
+  
+  # Take the average response as the estimate
+  return(mean(neighborhood_vals$dist))
+}
+
+```
+
+```{r cross_validation_function, echo=FALSE}
+# Cross-validation to choose the best k value
+cross_validation <- function(train_data, k_values, n_folds) {
+  # separate fold, 10 fold means separate to 10 set, 9 for train 1 for val.
+  fold_size <- floor(nrow(train_data) / n_folds)
+  # recorder for each k value
+  errors <- numeric(length(k_values))
+  
+  # iterate each k value
+  for (i in 1:length(k_values)) {
+    k <- k_values[i]
+    fold_errors <- numeric(n_folds)
+    # iterate each fold
+    for (j in 1:n_folds) {
+      # base on setting calculate val set indices
+      val_indices <- ((j - 1) * fold_size + 1):(j * fold_size)
+      val_fold <- train_data[val_indices, ]
+      
+      # train indices equal to whold train data exclude val indiciwa
+      train_indices <- setdiff(1:nrow(train_data), val_indices)
+      train_fold <- train_data[train_indices, ]
+      
+      # get the prediction for val data
+      val_predictions <- sapply(val_fold$speed, kNN, k = k, train_data = train_fold)
+      # calculate the error for this val data
+      fold_errors[j] <- mean((val_fold$dist - val_predictions)^2)
+    }
+    
+    # set average error to the K value
+    errors[i] <- mean(fold_errors)
+  }
+  
+  # find the best k value
+  best_k <- k_values[which.min(errors)]
+  return(best_k)
+}
+```
+
+```{r get_best_k, echo=FALSE}
+# Define the range of k values and number of folds
+train_data <- braking_data_train
+k_values <- 1:20
+# Use 10 folds to find the best k value
+n_folds <- 10
+best_k <- cross_validation(braking_data_train, k_values, n_folds)
+cat("In this training braking data, Best k value is", best_k, "\n")
+```
+```{r get_prediction_by_knn, echo=FALSE}
+# predict by knn at best k value on speed = 30 km/h
+knn_pred_30 <- kNN(30, best_k, train_data)
+knn_pred <- sapply(x_train, kNN, k = best_k, train_data = braking_data_train)
+cat("Base on the KNN model with the best k value (",best_k,"), braking distance for a car going at 30km/h is", knn_pred_30, 'm')
+```
+
+
+
+```{r}
+# Visualize both models along with the dataset
+data_plot <- ggplot(data = braking_data_train, aes(x = x_train, y = y_train)) +
+  # show the train data point
+  geom_point(color = "black", alpha = 0.3) +
+  # show the linear regression line.
+  geom_abline(aes(slope = b1, intercept = b0, col = "lm" ), show.legend = FALSE) +
+  # show the Knn model line with the best k value
+  geom_line(data = braking_data_train, aes(x = x_train, y = knn_pred, color = "knn"), size = 1) +
+  
+  labs(x = "Speed (km/h)", y = "Braking Distance (m)") +
+    scale_colour_manual(name = "Model fit", values = c("red", "blue"))
+
+data_plot
+```
+
+
+```{r calculate_test_mse}
+# Calculate MSE for both models on the test set
+test_prediction_lr <- b0 + b1 * x_test
+test_prediction_knn <- sapply(x_test, kNN, k = best_k, train_data = braking_data_train)
+mse_lr <- mean((y_test - test_prediction_lr)^2)
+mse_knn <- mean((y_test - test_prediction_knn)^2)
+cat("Final MSE for LR model is ", mse_lr, ",for knn model with best k value is ", mse_knn)
+```
+
+
+
+
+
+
+
+
+
+
+

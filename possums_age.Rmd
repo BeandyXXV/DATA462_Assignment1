@@ -9,31 +9,65 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r load_library, echo=FALSE}
+```{r load_library, echo=FALSE, include=FALSE}
 # install.packages("tidyverse")
 # import library
+
 library(dplyr)
 library(tidyverse)
 library(MASS)
 ```
 
+## Introduction
 
-```{r load_possums_data, echo=FALSE}
+Understanding the age structure and growth patterns of wildlife populations is crucial for developing effective conservation and management strategies. For the iconic Australian marsupial, the possum, accurately determining age can provide valuable insights into population dynamics, habitat suitability, and overall ecosystem health. However, directly measuring the age of wild animals is often challenging and invasive. This study aims to assess possum populations more efficiently and with minimal disturbance to the animals by examining the relationship between physical characteristics and age. Our research seeks to develop a practical, non-invasive method for field researchers and wildlife managers to estimate possum age, potentially revealing factors influencing their development across various habitats and life stages.
+
+```{r load_possums_data, echo=FALSE, include=FALSE}
 data_path <- "Dataset/possums.csv"
 origin_possums_data <- read.csv(data_path)
 ```
 
+```{r clean_data, include=FALSE, echo=FALSE}
+# remove the data which have null value
+origin_possums_data <- na.omit(origin_possums_data)
+```
+
+## Initial exploring over possums data
+
+### Total length of possums vs Age of possums
+
+The scatter plot below visualizes the distribution of possum age against total length. Upon inspection, we observe a subtle positive trend in the relationship between these two variables. To quantify the strength of this relationship, we calculated the Pearson's correlation coefficient (R). This statistical measure provides us with a numerical indicator of the association's strength and direction between total length and age in possums.
+
 ```{r init_plot, echo=FALSE}
-data_plot <- ggplot(origin_possums_data, aes(x = totlngth, y = age)) +
+data_plot <- ggplot(origin_possums_data, aes(x = age, y = totlngth)) +
   geom_point() +
-  labs(title = "年龄 vs 总长度（负鼠）",
-       x = "总长度",
-       y = "年龄") +
+  labs(title = "Age vs Total Length (Possums)",
+       x = "Age",
+       y = "Total Length") +
   theme_minimal()
 data_plot
 ```
 
-There is 7 sites in the dataset, after one-hot encoding, if site1 to site6 are all zero, that means the possum is come from site7.
+```{r cor_totlngth_age, echo=FALSE}
+pearson_r <- cor(origin_possums_data$age, origin_possums_data$totlngth, method = "pearson")
+cat("The Pearson's R value between total length and age of possums is ", pearson_r)
+```
+
+The results indicate a weak positive correlation between the total length and age of possums. This suggests that while total length can provide some information about a possum's age, it is not a highly reliable predictor on its own. Numerous other factors likely influence a possum's age. To improve our ability to predict possum age accurately, it would be beneficial to incorporate additional variables into a multivariate analysis.
+
+## Data preparation for multivariate analysis
+
+### Encode categorical variable to One-Hot
+
+In the possums data, there are two categorical variables. The first is 'sex', which includes two different types: 'm' for male and 'f' for female. The second one is 'site', which records the geographical trapping site index with values from 1 to 7, indicating that there are 7 trapping sites.
+
+We encoded the 'sex' column to 'female', where 0 represents male and 1 represents female. For the 'site' variable, we encoded it into 'site1' to 'site6', where 1 indicates the possum belongs to that certain site, and 0 indicates it does not. If value for site1 to site6 are all zero, it means the possum comes from site7.
+
+This encoding method effectively resolves the multicollinearity issue that could arise from complete one-hot encoding of categorical variables in linear regression models
+
+### Separate the possums data for training, validation and testing
+
+In this research, we separate the possums data to 3 parts for training, validation and testing, by the ratio of 8:1:1. This approach allows for effective linear model development, evaluation, and generalization assessment. This split ensures a robust evaluation process and helps in creating linear model that perform well not only on the possums data we have, but also on new possums data.
 
 ```{r process_possums_data, echo=FALSE}
 # remove col
@@ -59,7 +93,7 @@ possums_data <- possums_data %>%
   dplyr::select(-sex)
 
 # separate data to train-test-val 80%-10%-10%
-set.seed(222)
+set.seed(5)
 data_count <- nrow(possums_data)
 train_ind <- sample(1:data_count, size = data_count * 0.8)
 
@@ -75,18 +109,29 @@ possums_data_test <- remaining_data[test_ind, ]
 possums_data_val <- remaining_data[-test_ind, ]
 ```
 
+## Stepwise Forward Feature Selection for Possum Age Prediction
+
+### Process Description
+
+This process implements a forward stepwise feature selection approach to build a linear regression model for predicting possum age. The workflow is as follows:
+
+1.  Start with a model containing only the intercept.
+2.  Iteratively add predictor variables.
+3.  At each step, consider adding a new feature that minimizes the Mean Squared Error (MSE) on the training set.
+4.  Simultaneously calculate the MSE on the validation set.
+5.  Continue this process until all potential features have been considered.
 
 ```{r stepwise_feature_select}
 # Full model with all predictors
-features <- c("female", "hdlngth", "skullw", "totlngth", "taill", "footlgth", "earconch", "eye", "chest", "belly")
+possums_features <- c("female", "hdlngth", "skullw", "totlngth", "taill", "footlgth", "earconch", "eye", "chest", "belly", "site1", "site2", "site3", "site4", "site5", "site6")
 
 p <- 0
 
-best_features <- vector(length = length(features) +1)
+best_features <- vector(length = length(possums_features) +1)
 
-MSE_train_best <- vector(length = length(features) +1)
+MSE_train_best <- vector(length = length(possums_features) +1)
 
-MSE_valid_best <- vector(length = length(features) +1)
+MSE_valid_best <- vector(length = length(possums_features) +1)
 
 predictor <- c("1")
 
@@ -109,7 +154,7 @@ best_features[1] <- predictor
 p <- 1
 
 # generate all combinations of features, take p at a time, return the result as a list
-predictor <- combn(features, p, simplify = FALSE)
+predictor <- combn(possums_features, p, simplify = FALSE)
 
 # generate formula respectively
 formula <- sapply(predictor, function(x) paste("age", "~", paste0(x, collapse = "+"), sep = " "))
@@ -128,9 +173,9 @@ MSE_train_best[1 + p] <- min(MSEs_train)
 # find out the best performed feature and store its MSE on validation set
 MSE_valid_best[1 + p] <- mean((predict(fit_models[[which.min(MSEs_train)]], newdata = possums_data_val) - possums_data_val$age)^2)
 
-for (i in 2 :length(features)) {
+for (i in 2 :length(possums_features)) {
   p = i
-  predictor <- Filter(function(x) all(best_features[2:p]  %in% x), combn(features, p, simplify = FALSE))
+  predictor <- Filter(function(x) all(best_features[2:p]  %in% x), combn(possums_features, p, simplify = FALSE))
   formula <- sapply(predictor, function(x) paste("age", "~", paste0(x, collapse = "+"), sep = " "))
 
   fit_models <- lapply(formula, function(x) lm(x, data = possums_data_train))
@@ -139,10 +184,8 @@ for (i in 2 :length(features)) {
   best_features[1 + p] <- setdiff(predictor[[which.min(MSEs_train)]],best_features[2:p] )
   
   MSE_train_best[1 + p] <- min(MSEs_train)
-  print(which.min(MSEs_train))
   
   MSE_valid_best[1 + p] <- mean((predict(fit_models[[which.min(MSEs_train)]], newdata = possums_data_val) - possums_data_val$age)^2)
-  print(MSE_valid_best)
 }
 ```
 
@@ -152,6 +195,12 @@ df_MSE <- data.frame(feature=ordered(best_features, levels = unique(best_feature
 # knitr::kable(df_MSE, align = "ccc")
 ```
 
+### Result of Stepwise Forward Feature Selection
+
+This graph illustrates the results of our forward stepwise feature selection process, showcasing how different features impact the Mean Squared Error (MSE) for both our training and validation sets. It's important to note that these results were obtained using seed(1) for data separation, and our experiments revealed that different seeds can lead to varying outcomes - a phenomenon likely attributed to our relatively small dataset.
+
+The x-axis represents the features in the order they were added to the model, while the y-axis shows the MSE values. The red line represents the training MSE, and the blue line represents the validation MSE.
+
 ```{r}
 ggplot(data=df_MSE, aes(x=feature)) +
   geom_point(aes(y=MSE_training, color="MSE_training")) +
@@ -159,9 +208,6 @@ ggplot(data=df_MSE, aes(x=feature)) +
   geom_point(aes(y=MSE_valid, color="MSE_validate")) + 
   geom_line(aes(y=MSE_valid, color="MSE_validate", group=1)) +
   geom_point(aes(y=min(MSE_valid), x=feature[which.min(MSE_valid)]), size = 5, color = "black", shape = 13) + 
-  labs(x="Features in order", y="MSE")
+  labs(x="Features in order", y="MSE") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-
-
-
-
