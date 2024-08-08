@@ -93,7 +93,7 @@ possums_data <- possums_data %>%
   dplyr::select(-sex)
 
 # separate data to train-test-val 80%-10%-10%
-set.seed(5)
+set.seed(1)
 data_count <- nrow(possums_data)
 train_ind <- sample(1:data_count, size = data_count * 0.8)
 
@@ -199,7 +199,9 @@ df_MSE <- data.frame(feature=ordered(best_features, levels = unique(best_feature
 
 This graph illustrates the results of our forward stepwise feature selection process, showcasing how different features impact the Mean Squared Error (MSE) for both our training and validation sets. It's important to note that these results were obtained using seed(1) for data separation, and our experiments revealed that different seeds can lead to varying outcomes - a phenomenon likely attributed to our relatively small dataset.
 
-The x-axis represents the features in the order they were added to the model, while the y-axis shows the MSE values. The red line represents the training MSE, and the blue line represents the validation MSE.
+Based on this line graph, we can observe that the mean squared error (MSE) in the training set consistently decreases as new features are added. in the validation set, We can observe that after adding the "belly" feature, the model's MSE on the validation set significantly decreases. Additionally, "belly" is the first feature selected in the stepwise forward feature selection process. This indicates that the "belly" feature is the most important predictor for "age". Beside this the model achieves its optimal MSE value after adding the "tail" feature, and adding more features beyond this point does not further reduce the MSE value.
+
+Additionally, we can observe that after adding the "site4" feature, there is no significant decrease in the model's MSE, that indicate these four features are relatively important for the variable "age". In this study, to balance computational resources and performance, we will use four features for multivariate regression model training, including belly, site5, hdlength, and site4.
 
 ```{r}
 ggplot(data=df_MSE, aes(x=feature)) +
@@ -210,4 +212,22 @@ ggplot(data=df_MSE, aes(x=feature)) +
   geom_point(aes(y=min(MSE_valid), x=feature[which.min(MSE_valid)]), size = 5, color = "black", shape = 13) + 
   labs(x="Features in order", y="MSE") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r model_train}
+# Select the features and target variable
+selected_features <- c("belly", "site5", "hdlngth", "site4")
+model_data <- possums_data_train[, c(selected_features, "age")]
+
+lm_model <- lm(age ~ ., data = model_data)
+
+predictions <- predict(lm_model, newdata = possums_data_test)
+
+mse_test <- mean((possums_data_test$age - predictions)^2)
+
+cat("Mean Square Error on test set:", mse_test, "\n")
+
+cat("\nModel Coefficients:\n")
+print(coef(lm_model))
+
 ```
